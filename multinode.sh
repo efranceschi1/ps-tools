@@ -69,7 +69,7 @@ function usage() {
     echo "  ${s_bold}SYNOPSIS:${s_reset}"
     echo "    Use ${s_bold}${SCRIPTNAME}${s_reset} to execute commands sync/async in multiple nodes at once"
     echo
-    echo "  ${s_bold}SYNOPSIS:${s_reset}"
+    echo "  ${s_bold}SYNTAX:${s_reset}"
     echo "    ${SCRIPTNAME} [options] command [arg 1] [arg 2] [arg n]"
     echo
     echo "  ${s_bold}Immediate commands:${s_reset}"
