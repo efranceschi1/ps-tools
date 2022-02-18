@@ -141,6 +141,12 @@ function test_hosts() {
 
 # Install SSH Key
 function install_ssh_key() {
+    if [ ! -x /usr/bin/expect ]
+    then
+        echo "Can't find /usr/bin/expect"
+        echo "Aborting"
+        exit 2
+    fi
     echo -n "Enter the password for user $SSH_USER: "
     read -s password
     echo
@@ -218,30 +224,51 @@ then
     exit 1
 fi
 
+# Stats
+export CMD_ERR=0
+export CMD_OK=0
+
 # Execute commands
 for h in $(get_hosts)
 do
     function cmd() {
-        (
+        {
             start_time="$(date +%s)"
-            echo "${s_bold}==> [$(now)] BEGIN COMMAND ${c_yellow}\"$CMD\"${s_reset}${s_bold} ON HOST: ${c_yellow}$h${s_reset}"
+            echo "${s_bold}==> [$(now)] BEGIN COMMAND ${c_yellow}\"$CMD\"${s_reset}" \
+                "${s_bold} ON HOST: ${c_yellow}$h${s_reset}"
             ssh $SSH_OPTS -l $SSH_USER $h "$CMD" 2>&1
+            exit_code=$?
             end_time="$(date +%s)"
             elapsed_time=$[end_time-start_time]
-            echo "${s_bold}<== [$(now)] END COMMAND ${c_yellow}\"$CMD\"${s_reset}${s_bold} ON HOST: ${c_yellow}$h${s_reset}${s_bold} WITH EXIT CODE ${c_yellow}$?${s_reset}${s_bold} in ${c_yellow}${elapsed_time} seconds${s_reset}"
-        ) | tee -a "$LOG_DIR/$h.log" 2>&1
+            echo "${s_bold}<== [$(now)] END COMMAND ${c_yellow}\"$CMD\"${s_reset}" \
+                "${s_bold} ON HOST: ${c_yellow}$h${s_reset}" \
+                "${s_bold} WITH EXIT CODE ${c_yellow}$exit_code${s_reset}" \
+                "${s_bold} in ${c_yellow}${elapsed_time} seconds${s_reset}"
+            return $exit_code
+        } | tee -a "$LOG_DIR/$h.log" 2>&1
+        return ${PIPESTATUS[0]}
     }
     if [ -z "$OPT_ASYNC" ]
     then
-        cmd 
+        cmd && let CMD_OK=CMD_OK+1 || let CMD_ERR=CMD_ERR+1
     else
-        cmd | sed "s/^/$h: /" &
+        (cmd | sed "s/^/$h: /"; exit ${PIPESTATUS[0]}) &
+        pids+=($!)
     fi
 done
-if [ ! -z "$OPT_ASYNC" ]
+if [ -n "$OPT_ASYNC" ]
 then
-    wait
+    for pid in ${pids[*]}
+    do
+        wait $pid && let CMD_OK=CMD_OK+1 || let CMD_ERR=CMD_ERR+1
+    done
 fi
 
 # Log message
+let CMD_TOTAL=CMD_ERR+CMD_OK
+echo "${s_bold}*** [$(now)] FINISHED EXECUTING ${c_yellow}${CMD_TOTAL}${s_reset}${s_bold} COMMANDS:"
+echo "${s_bold}*** [$(now)]    ${c_green}${CMD_OK} Successfull${s_reset}"
+echo "${s_bold}*** [$(now)]    ${c_red}${CMD_ERR} Errors${s_reset}"
 echo "${s_bold}*** [$(now)] ALL LOGS ARE AVAILABLE AT: ${c_yellow}$LOG_DIR${s_reset}"
+
+exit 0
